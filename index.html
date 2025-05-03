@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Stations Vélib' - Paris</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
+  />
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background-color: #f2f2f2;
+    }
+
+    header {
+      background-color: #007c91;
+      color: white;
+      padding: 15px;
+      text-align: center;
+      font-size: 1.5rem;
+    }
+
+    nav {
+      display: flex;
+      background-color: #ddd;
+    }
+
+    nav button {
+      flex: 1;
+      padding: 10px;
+      background: #eee;
+      border: none;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+
+    nav button.active {
+      background: #007c91;
+      color: white;
+      font-weight: bold;
+    }
+
+    .tab {
+      display: none;
+    }
+
+    .tab.active {
+      display: block;
+    }
+
+    #map {
+      height: 85vh;
+      width: 100%;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px auto;
+      background-color: white;
+    }
+
+    th, td {
+      padding: 8px;
+      text-align: left;
+      border-bottom: 1px solid #ccc;
+    }
+
+    th {
+      background-color: #007c91;
+      color: white;
+    }
+
+    tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+  </style>
+</head>
+<body>
+  <header>Stations Vélib’ - Paris</header>
+
+  <nav>
+    <button class="tab-btn active" data-tab="mapTab">🗺️ Carte</button>
+    <button class="tab-btn" data-tab="dataTab">📋 Données</button>
+  </nav>
+
+  <div id="mapTab" class="tab active">
+    <div id="map"></div>
+  </div>
+
+  <div style="padding: 10px; text-align: center;">
+    <label for="communeSelect">Filtrer par commune : </label>
+    <select id="communeSelect">
+      <option value="all">Toutes les communes</option>
+    </select>
+  </div>
+  
+
+  <div id="dataTab" class="tab">
+    <table>
+      <thead>
+        <tr>
+          <th>Nom de la station</th>
+          <th>Commune</th>
+          <th>Vélos</th>
+          <th>Bornes</th>
+          <th>État</th>
+        </tr>
+      </thead>
+      <tbody id="dataBody">
+        <!-- Contenu généré dynamiquement -->
+      </tbody>
+    </table>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([48.8566, 2.3522], 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    fetch("https://opendata.paris.fr/api/records/1.0/search/?dataset=velib-disponibilite-en-temps-reel&rows=1000")
+      .then(response => response.json())
+      .then(data => {
+        const tableBody = document.getElementById("dataBody");
+
+        data.records.forEach(station => {
+          const fields = station.fields;
+          if (!fields.coordonnees_geo) return;
+
+          // Carte
+          const lat = fields.coordonnees_geo[0];
+          const lon = fields.coordonnees_geo[1];
+          const name = fields.name || "Inconnu";
+          const commune = fields.nom_arrondissement_communes || "N/A";
+          const bikes = fields.numbikesavailable || 0;
+          const docks = fields.numdocksavailable || 0;
+          const isOpen = fields.is_installed && fields.is_renting && fields.is_returning;
+          const status = isOpen ? "✅ Ouverte" : "❌ Fermée";
+
+          const popupContent = `
+            <strong>${name}</strong><br>
+            Commune : ${commune}<br>
+            Vélos : ${bikes} | Bornes : ${docks}<br>
+            État : ${status}
+          `;
+
+          L.marker([lat, lon]).addTo(map).bindPopup(popupContent);
+
+          // Données
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${name}</td>
+            <td>${commune}</td>
+            <td>${bikes}</td>
+            <td>${docks}</td>
+            <td>${status}</td>
+          `;
+          tableBody.appendChild(row);
+        });
+      });
+
+    // Onglets
+    const buttons = document.querySelectorAll(".tab-btn");
+    const tabs = document.querySelectorAll(".tab");
+
+    buttons.forEach(btn => {
+      btn.addEventListener("click", () => {
+        buttons.forEach(b => b.classList.remove("active"));
+        tabs.forEach(t => t.classList.remove("active"));
+        btn.classList.add("active");
+        document.getElementById(btn.dataset.tab).classList.add("active");
+      });
+    });
+  </script>
+</body>
+</html>
