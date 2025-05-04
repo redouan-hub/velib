@@ -5,10 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Stations Vélib' - Paris</title>
 
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
-  />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"/>
 
   <style>
     body {
@@ -94,27 +91,25 @@
   </div>
 
   <div style="padding: 10px; text-align: center;">
-    <label for="communeSelect">Filtrer par commune : </label>
+    <label for="communeSelect">Filtrer par département : </label>
     <select id="communeSelect">
-      <option value="all">Toutes les communes</option>
+      <option value="all">Tous les départements</option>
     </select>
   </div>
-  
 
   <div id="dataTab" class="tab">
     <table>
       <thead>
         <tr>
           <th>Nom de la station</th>
-          <th>Commune</th>
+          <th>Département</th>
+          <th>Code station</th>
           <th>Vélos</th>
           <th>Bornes</th>
           <th>État</th>
         </tr>
       </thead>
-      <tbody id="dataBody">
-        <!-- Contenu généré dynamiquement -->
-      </tbody>
+      <tbody id="dataBody"></tbody>
     </table>
   </div>
 
@@ -126,48 +121,82 @@
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
+    let allStations = [];
+    let markers = [];
+
+    function updateDisplay(filterDepartment) {
+      const tableBody = document.getElementById("dataBody");
+      tableBody.innerHTML = "";
+
+      markers.forEach((m) => map.removeLayer(m));
+      markers = [];
+
+      allStations.forEach((station) => {
+        const fields = station.fields;
+        if (!fields.coordonnees_geo) return;
+
+        const lat = fields.coordonnees_geo[0];
+        const lon = fields.coordonnees_geo[1];
+        const name = fields.name || "Inconnu";
+        const stationCode = fields.stationcode || "N/A";
+        const departmentCode = fields.code_insee_commune ? fields.code_insee_commune.slice(0, 2) : "N/A";
+        const bikes = fields.numbikesavailable || 0;
+        const docks = fields.numdocksavailable || 0;
+        const isOpen = fields.is_installed && fields.is_renting && fields.is_returning;
+        const status = isOpen ? "✅ Ouverte" : "❌ Fermée";
+
+        if (filterDepartment !== "all" && departmentCode !== filterDepartment) return;
+
+        const popupContent = `
+          <strong>${name}</strong><br>
+          Code station : ${stationCode}<br>
+          Département : ${departmentCode}<br>
+          Vélos : ${bikes} | Bornes : ${docks}<br>
+          État : ${status}
+        `;
+
+        const marker = L.marker([lat, lon]).addTo(map).bindPopup(popupContent);
+        markers.push(marker);
+
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${name}</td>
+          <td>${departmentCode}</td>
+          <td>${stationCode}</td>
+          <td>${bikes}</td>
+          <td>${docks}</td>
+          <td>${status}</td>
+        `;
+        tableBody.appendChild(row);
+      });
+    }
+
     fetch("https://opendata.paris.fr/api/records/1.0/search/?dataset=velib-disponibilite-en-temps-reel&rows=1000")
       .then(response => response.json())
       .then(data => {
-        const tableBody = document.getElementById("dataBody");
+        allStations = data.records;
+        const departments = new Set();
 
-        data.records.forEach(station => {
-          const fields = station.fields;
-          if (!fields.coordonnees_geo) return;
-
-          // Carte
-          const lat = fields.coordonnees_geo[0];
-          const lon = fields.coordonnees_geo[1];
-          const name = fields.name || "Inconnu";
-          const commune = fields.nom_arrondissement_communes || "N/A";
-          const bikes = fields.numbikesavailable || 0;
-          const docks = fields.numdocksavailable || 0;
-          const isOpen = fields.is_installed && fields.is_renting && fields.is_returning;
-          const status = isOpen ? "✅ Ouverte" : "❌ Fermée";
-
-          const popupContent = `
-            <strong>${name}</strong><br>
-            Commune : ${commune}<br>
-            Vélos : ${bikes} | Bornes : ${docks}<br>
-            État : ${status}
-          `;
-
-          L.marker([lat, lon]).addTo(map).bindPopup(popupContent);
-
-          // Données
-          const row = document.createElement("tr");
-          row.innerHTML = `
-            <td>${name}</td>
-            <td>${commune}</td>
-            <td>${bikes}</td>
-            <td>${docks}</td>
-            <td>${status}</td>
-          `;
-          tableBody.appendChild(row);
+        allStations.forEach(station => {
+          const code = station.fields.code_insee_commune;
+          if (code) departments.add(code.slice(0, 2));
         });
+
+        const select = document.getElementById("communeSelect");
+        Array.from(departments).sort().forEach(dept => {
+          const option = document.createElement("option");
+          option.value = dept;
+          option.textContent = `Département ${dept}`;
+          select.appendChild(option);
+        });
+
+        select.addEventListener("change", () => {
+          updateDisplay(select.value);
+        });
+
+        updateDisplay("all");
       });
 
-    // Onglets
     const buttons = document.querySelectorAll(".tab-btn");
     const tabs = document.querySelectorAll(".tab");
 
